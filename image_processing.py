@@ -2,10 +2,19 @@ import cv2 as cv
 import numpy as np
 
 
+# Note: pattern must be a square (i.e., pattern_dim x pattern_dim),
+#   but can have different number of grid units in x and y axes.
+
+
 # Note: these parameters will need to change as the drone is farther from the camera, and the resolution of the video.
 perimeter_thresh = 50
 area_thresh = 2000
+
 cnt_approx_factor = 0.05
+pattern_width = 10  # grid units
+pattern_height = 10  # grid units
+pattern_dim = 400  # pixels
+white_black_thresh = 100
 
 
 def detect_shape(cnt):
@@ -14,8 +23,70 @@ def detect_shape(cnt):
     return len(approx) == 4
 
 
-def decode_pattern(frame, corners):
-    pass
+def sort_corners(corners):
+    # Sort by x-coordinate values.
+    corners.sort(key=lambda x: x[0])
+
+    # Separate left and right corners by evaluating x-coordinates.
+    left_corners = corners[:2]
+    right_corners = corners[2:]
+
+    # Separate left top and bottom corners by evaluating y-coordinates.
+    top_left = left_corners[0] if left_corners[0][1] > left_corners[1][1] else left_corners[1]
+    bot_left = left_corners[1] if left_corners[0][1] > left_corners[1][1] else left_corners[0]
+
+    # Separate right top and bottom corners by evaluating y-coordinates.
+    top_right = right_corners[0] if right_corners[0][1] > right_corners[1][1] else right_corners[1]
+    bot_right = right_corners[1] if right_corners[0][1] > right_corners[1][1] else right_corners[0]
+
+    return [top_left, top_right, bot_left, bot_right]
+
+
+def decode_pattern(frame, cnt):
+    corners = []
+    for pt in cnt:
+        corners.append([pt[0][0], pt[0][1]])
+    # Sort corners in correct order for perspective transformation.
+    corners = sort_corners(corners)
+
+    # Apply perspective transformation, used to better segment and read each grid unit in pattern.
+    orig_pts = np.float32(corners)
+    result_pts = np.float32([[0, 0], [pattern_dim, 0], [0, pattern_dim], [pattern_dim, pattern_dim]])
+    matrix = cv.getPerspectiveTransform(orig_pts, result_pts)
+    pattern = cv.warpPerspective(frame, matrix, (400, 400))
+    # cv.imshow("Original Pattern", pattern)
+
+    decoded_pattern = pattern.copy()  # For visualization. Do not add text to pattern or it may disrupt BGR values.
+
+    # TODO: Make this filtering better so lighting has a minimal effect.
+    gray = cv.cvtColor(pattern, cv.COLOR_BGR2GRAY)
+    _, pattern = cv.threshold(gray, white_black_thresh, 255, cv.THRESH_BINARY)
+    # cv.imshow("Filtered Pattern", pattern2)
+
+    # Estimate centroids of pattern grid units.
+    horizontal_grid_units = pattern_width + 2  # Add two for black border grid units
+    vertical_grid_units = pattern_height + 2  # Add two for black border grid units
+    grid_unit_width = pattern_dim / horizontal_grid_units
+    grid_unit_height = pattern_dim / vertical_grid_units
+
+    # Decode each grid unit as 0 or 1 based on color at centroid.
+    #   White -> 0, Black -> 1
+    for i in range(horizontal_grid_units):
+        for j in range(vertical_grid_units):
+            cX = int(i * grid_unit_width + grid_unit_width / 2)
+            cY = int(j * grid_unit_height + grid_unit_height / 2)
+            if np.mean(pattern[cY, cX]) > white_black_thresh:
+                # Black Grid Unit, i.e., 1.
+                decoded_pattern = cv.putText(decoded_pattern, '1', (cX, cY), cv.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2,
+                                             cv.LINE_AA)
+            else:
+                # White Grid Unit, i.e., 0.
+                decoded_pattern = cv.putText(decoded_pattern, '0', (cX, cY), cv.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2,
+                                             cv.LINE_AA)
+            # cv.circle(pattern, (x, y), 3, (0, 0, 255), -1)
+
+    cv.imshow("Decoded Pattern", decoded_pattern)
+
 
 
 def process_frame(frame):
