@@ -1,119 +1,81 @@
 import cv2 as cv
 import numpy as np
+import random
 
 
-pattern_width = 10
-pattern_height = 10
+# Note: these parameters will need to change as the drone is farther from the camera, and the resolution of the video.
+perimeter_thresh = 50
+area_thresh = 2000
 
 
-# For tuning color filtering
-hsvBar = False
-
-
-# Dummy function for getTrackbarPos
-def nothing():
-    return
-
-
-def draw_grid(roi, w, h):
-    unit_width = w / pattern_width
-    unit_height = h / pattern_height
-
-    grid = roi.copy()
-
-    for i in range(pattern_width):
-        for j in range(pattern_height):
-            x = int(i * unit_width + unit_width / 2)
-            y = int(j * unit_height + unit_height / 2)
-
-            # print(grid[x][y])
-
-            cv.circle(grid, (x, y), 3, (0, 0, 255), 1)
-        print("New Unit\n")
-    print("New Unit\n")
-
-    cv.imshow("Grid", grid)
+def detect_shape(cnt):
+    perimeter = cv.arcLength(cnt, True)
+    approx = cv.approxPolyDP(cnt, 0.04 * perimeter, True)
+    return len(approx) == 4
 
 
 def process_frame(frame):
-    hsv = cv.cvtColor(frame, cv.COLOR_BGR2HSV)
+    copy = frame.copy()
 
-    if hsvBar:
-        l_h = cv.getTrackbarPos("LH", "Tracking")
-        l_s = cv.getTrackbarPos("LS", "Tracking")
-        l_v = cv.getTrackbarPos("LV", "Tracking")
+    gray = cv.cvtColor(copy, cv.COLOR_BGR2GRAY)
+    cv.imshow("Gray", gray)
 
-        u_h = cv.getTrackbarPos("UH", "Tracking")
-        u_s = cv.getTrackbarPos("US", "Tracking")
-        u_v = cv.getTrackbarPos("UV", "Tracking")
+    gray = cv.GaussianBlur(gray, (7, 7), 0)
 
-    # Red HSV
-    if not hsvBar:
-        l_b = np.array([0, 172, 76])
-        u_b = np.array([23, 255, 255])
-    else:
-        l_b = np.array([l_h, l_s, l_v])
-        u_b = np.array([u_h, u_s, u_v])
+    thresh = cv.adaptiveThreshold(gray, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 2)
+    cv.imshow("Thresh", thresh)
 
-    mask = cv.inRange(hsv, l_b, u_b)
+    edges = cv.Canny(thresh, 100, 200)
+    cv.imshow("Edges", edges)
 
-    # cv2.imshow("mask", mask)
-    mask = cv.morphologyEx(mask, cv.MORPH_OPEN, cv.getStructuringElement(cv.MORPH_ELLIPSE, (10, 10)))
-    # cv2.imshow("less noise", mask)
-    mask = cv.morphologyEx(mask, cv.MORPH_CLOSE, cv.getStructuringElement(cv.MORPH_ELLIPSE, (20, 20)))
-    # cv2.imshow("filled gaps", mask)
+    contours, _ = cv.findContours(edges, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
 
-    cv.imshow("testing", mask)
+    # Record all children based on their centroids, later used to determine if the child has a parent.
+    centroids = []
+    for i, cnt in enumerate(contours):
+        perimeter = cv.arcLength(cnt, True)
+        if perimeter > perimeter_thresh:
+            M = cv.moments(cnt)
+            cX = 0
+            cY = 0
+            if M["m00"] > 0:
+                cX = int(M["m10"] / M["m00"])
+                cY = int(M["m01"] / M["m00"])
+            centroids.append([cX, cY])
 
-    # Object detection
-    contours, _ = cv.findContours(mask, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
-    if contours:
-        max_idx = 0
-        max_area = 0
-        for i, cnt in enumerate(contours):
-            if cv.contourArea(cnt) > max_area:
-                max_idx = i
-                max_area = cv.contourArea(cnt)
+    # For each valid contour (meeting perimeter/area thresholds), determine its number of children based on children
+    #   centroids and parent bounding box.
+    child_counts = [0] * len(contours)
+    for i, cnt in enumerate(contours):
+        perimeter = cv.arcLength(cnt, True)
+        area = cv.contourArea(cnt)
+        if perimeter > perimeter_thresh and area > area_thresh:
+            x, y, w, h = cv.boundingRect(cnt)
+            for centroid in centroids:
+                cX = centroid[0]
+                cY = centroid[1]
+                if x < cX < (x + w) and y < cY < (y + h):
+                    child_counts[i] += 1
 
-        print(max_area)
-        if max_area > 100:
+    # The contour with the greatest number of children is considered the pattern.
+    #   Note: Current method only supports one pattern at a time, which should be fine for our purposes.
+    #   Note: AprilTags takes number of *quadrilateral* children.
+    max_children_count = max(child_counts)
+    max_children_cnt = contours[child_counts.index(max_children_count)]
 
-            # cnt = max(contours, key=lambda x: cv.contourArea(x))
+    # Verify shape is a quadrilateral; this helps with bad detections (i.e., non-patterns), but still happens at times.
+    if max_children_count > 0 and detect_shape(max_children_cnt):
+        area = cv.contourArea(max_children_cnt)
+        print(area)
+        cv.drawContours(copy, [max_children_cnt], 0, (0, 255, 0), 4)
 
-            # Create a mask with contour.
-            copy = frame.copy()
-            cv.drawContours(copy, contours, max_idx, (0, 255, 0), 5)
-
-            cv.imshow("test", copy)
-
-            x, y, w, h = cv.boundingRect(contours[max_idx])
-            cv.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 3)
-
-            ROI = frame[y:y+h, x:x+w]
-            cv.imshow("roi", ROI)
-
-            draw_grid(ROI, w, h)
-
-    res = cv.bitwise_and(frame, frame, mask=mask)
-
-    # cv.imshow("frame", frame)
-    # cv.imshow("mask", mask)
-    cv.imshow("res", res)
+    cv.imshow("Output", copy)
 
 
 def main():
     # TODO: Connect to Tello EDU Drone
 
     # TODO: Read Hopfield Network weights from CSV here.
-
-    if hsvBar:
-        cv.namedWindow("Tracking")
-        cv.createTrackbar("LH", "Tracking", 0, 255, nothing)
-        cv.createTrackbar("LS", "Tracking", 0, 255, nothing)
-        cv.createTrackbar("LV", "Tracking", 0, 255, nothing)
-        cv.createTrackbar("UH", "Tracking", 255, 255, nothing)
-        cv.createTrackbar("US", "Tracking", 255, 255, nothing)
-        cv.createTrackbar("UV", "Tracking", 255, 255, nothing)
 
     # TODO: Replace with the Tello EDU video stream
     cap = cv.VideoCapture(0)
