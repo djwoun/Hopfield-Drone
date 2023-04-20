@@ -11,21 +11,34 @@ import pandas as pd
 from PIL import Image, ImageDraw
 import matplotlib.pyplot as plt
 
-f = 10
+f = 12
 n = f*f
 pattern = 10
 bipolarVector = np.random.choice([-1, 1], size=(pattern,n))
+
+for i in range (10):
+    #print(i)
+    for j in range (12):
+        for k in range(12):
+            if(j==11 or k ==11 or j == 0 or k ==0):
+                #print("a")
+                bipolarVector[i][j+k*12] = -1
 
 
 #df2 =  pd.DataFrame()
 for RUN in range (10):
     fig = plt.figure()
-    print(RUN)
+    #print(RUN)
     image = (bipolarVector[RUN].reshape(f, f) + 1) / 2 # Map -1 to 0 and 1 to 1
-    plt.imshow(image, cmap='gray')
+    
     #plt.show()
+    
     df =  pd.DataFrame()
-    plt.savefig(str(RUN))
+    #plt.set(xlabel=None)
+    
+    plt.axis('off')
+    plt.imshow(image, cmap='gray')
+    plt.savefig("csv2/"+str(RUN), dpi=500)
     #df.reset_index(drop=True, inplace=True)
     #df2.reset_index(drop=True, inplace=True)
     df = pd.DataFrame({str(RUN):  bipolarVector[RUN]})
@@ -33,4 +46,4 @@ for RUN in range (10):
     
 #print(df2)
 
-    df.to_csv('test'+str(RUN)+'.csv', index=False)
+    #df.to_csv('csv2/test'+str(RUN)+'.csv', index=False)
