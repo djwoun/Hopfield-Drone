@@ -25,8 +25,6 @@ hopfield_patterns = 10
 
 used_patterns = [0] * hopfield_patterns
 
-tello = None
-
 
 # Sigma sign function
 def sign(x):
@@ -69,17 +67,26 @@ def init_hopfield():
     return expected_patterns, weights
 
 
-def recognize_pattern(input_pattern, expected_patterns, weights):
+def recognize_pattern(input_pattern, expected_patterns, weights, tello):
     # print(input_pattern)
     recognized_pattern = run(input_pattern, weights)
 
+    print(tello.get_battery())
+
     if np.array_equal(expected_patterns[0], recognized_pattern) and used_patterns[0] == 0:
-        # TODO: IMPORTANT!!! Only recognize a pattern once, do not send 30 of the same command to the drone.
         print("Take off")
         tello.takeoff()
         used_patterns[0] = 1
+    elif np.array_equal(expected_patterns[1], recognized_pattern) and used_patterns[1] == 0:
+        print("Flip Forward")
+        tello.flip_forward()
+        used_patterns[1] = 1
+    elif np.array_equal(expected_patterns[2], recognized_pattern) and used_patterns[2] == 0:
+        print("Move Forward")
+        tello.set_speed(10)
+        tello.move_forward(20)
+        used_patterns[2] = 1
     elif np.array_equal(expected_patterns[9], recognized_pattern) and used_patterns[9] == 0:
-        # TODO: IMPORTANT!!! Only recognize a pattern once, do not send 30 of the same command to the drone.
         print("Land")
         tello.land()
         used_patterns[9] = 1
@@ -267,7 +274,7 @@ def main():
         pattern = process_frame(frame)
         if pattern is not None and len(pattern) == hopfield_n:
             # print("Recognizing pattern...")
-            recognize_pattern(pattern, expected_patterns, weights)
+            recognize_pattern(pattern, expected_patterns, weights, tello)
 
         # TODO: IMPORTANT!!! Only recognize a pattern once, do not send 30 of the same command to the drone.
 
