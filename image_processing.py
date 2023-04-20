@@ -1,5 +1,9 @@
 import cv2 as cv
 import numpy as np
+import pandas as pd
+# from PIL import Image, ImageDraw
+# import matplotlib.pyplot as plt
+from djitellopy import Tello
 
 
 # Note: pattern must be a square (i.e., pattern_dim x pattern_dim),
@@ -16,6 +20,76 @@ pattern_height = 10  # grid units
 pattern_dim = 400  # pixels
 white_black_thresh = 100
 
+hopfield_n = 100
+hopfield_patterns = 10
+
+used_patterns = [0] * hopfield_patterns
+
+tello = None
+
+
+# Sigma sign function
+def sign(x):
+    if (x >= 0):
+        return 1
+    else:
+        return -1
+
+
+# Calculates for the new network with weight
+def run(network, weights):
+    sizeofNet = len(network)
+    new_network = np.zeros(sizeofNet)
+
+    for i in range(sizeofNet):
+        h = 0
+        for j in range(sizeofNet):
+            h += weights[i, j] * network[j]
+        new_network[i] = sign(h)
+    return new_network
+
+
+def init_hopfield():
+    expected_patterns = []
+    for RUN in range(10):
+        temp = np.loadtxt("csv2/test" + str(RUN) + ".csv",
+                          delimiter=",", dtype=int)
+        temp = np.delete(temp, 0, 0)
+        expected_patterns.append(temp)
+
+    weights = np.zeros((hopfield_n, hopfield_n))
+
+    for p2 in range(hopfield_patterns):
+        for i in range(hopfield_n):
+            for j in range(hopfield_n):
+                if i != j:
+                    weights[i, j] += expected_patterns[p2][i] * expected_patterns[p2][j]
+    weights /= hopfield_n
+
+    return expected_patterns, weights
+
+
+def recognize_pattern(input_pattern, expected_patterns, weights):
+    # print(input_pattern)
+    recognized_pattern = run(input_pattern, weights)
+
+    if np.array_equal(expected_patterns[0], recognized_pattern) and used_patterns[0] == 0:
+        # TODO: IMPORTANT!!! Only recognize a pattern once, do not send 30 of the same command to the drone.
+        print("Take off")
+        tello.takeoff()
+        used_patterns[0] = 1
+    elif np.array_equal(expected_patterns[9], recognized_pattern) and used_patterns[9] == 0:
+        # TODO: IMPORTANT!!! Only recognize a pattern once, do not send 30 of the same command to the drone.
+        print("Land")
+        tello.land()
+        used_patterns[9] = 1
+    '''
+    for i, pattern in enumerate(expected_patterns):
+        if np.array_equal(pattern, recognized_pattern) and used_patterns[i] == 0:
+            # TODO: IMPORTANT!!! Only recognize a pattern once, do not send 30 of the same command to the drone.
+            used_patterns[i] = 1
+            print(pattern)
+    '''
 
 def detect_shape(cnt):
     perimeter = cv.arcLength(cnt, True)
@@ -48,7 +122,7 @@ def decode_pattern(frame, cnt):
         corners.append([pt[0][0], pt[0][1]])
     # Sort corners in correct order for perspective transformation.
     corners = sort_corners(corners)
-    print(corners)
+    # print(corners)
 
     # Apply perspective transformation, used to better segment and read each grid unit in pattern.
     orig_pts = np.float32(corners)
@@ -89,25 +163,24 @@ def decode_pattern(frame, cnt):
                 pattern_bits.append(-1)
             # cv.circle(pattern, (x, y), 3, (0, 0, 255), -1)
 
-    print(pattern_bits)
-    print("--------------")
     cv.imshow("Decoded Pattern", decoded_pattern)
 
+    return pattern_bits
 
 
 def process_frame(frame):
     copy = frame.copy()
 
     gray = cv.cvtColor(copy, cv.COLOR_BGR2GRAY)
-    cv.imshow("Gray", gray)
+    # cv.imshow("Gray", gray)
 
     gray = cv.GaussianBlur(gray, (7, 7), 0)
 
     thresh = cv.adaptiveThreshold(gray, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 2)
-    cv.imshow("Thresh", thresh)
+    # cv.imshow("Thresh", thresh)
 
     edges = cv.Canny(thresh, 100, 200)
-    cv.imshow("Edges", edges)
+    # cv.imshow("Edges", edges)
 
     contours, _ = cv.findContours(edges, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
 
@@ -167,33 +240,46 @@ def process_frame(frame):
                 x, y = pt[0]
                 cv.circle(copy, (x, y), 3, (0, 0, 255), 5)
 
-            # Decode the binary representation of the pattern.
-            decode_pattern(frame, approx_cnt)
+            cv.imshow('Output', copy)
 
-    cv.imshow("Output", copy)
+            # Decode the binary representation of the pattern.
+            return decode_pattern(frame, approx_cnt)
 
 
 def main():
-    # TODO: Connect to Tello EDU Drone
+    # Connect to Tello EDU Drone
+    tello = Tello()
+    tello.connect()
 
-    # TODO: Read Hopfield Network weights from CSV here.
+    # Initialize Hopfield Network with expected patterns.
+    expected_patterns, weights = init_hopfield()
 
-    # TODO: Replace with the Tello EDU video stream
-    cap = cv.VideoCapture(0)
-    while cap.isOpened():
-        _, frame = cap.read()
+    # Start camera stream and execute computer vision.
+    # cap = cv.VideoCapture(0)
+    tello.streamon()
+    while True:
+        # _, frame = cap.read()
+        frame = tello.get_frame_read().frame
 
         # TODO: Verify size of frame
         # frame = cv.resize(frame, (1280, 720))
 
-        process_frame(frame)
+        pattern = process_frame(frame)
+        if pattern is not None and len(pattern) == hopfield_n:
+            # print("Recognizing pattern...")
+            recognize_pattern(pattern, expected_patterns, weights)
+
+        # TODO: IMPORTANT!!! Only recognize a pattern once, do not send 30 of the same command to the drone.
 
         cv.imshow("Stream", frame)
 
         if cv.waitKey(10) & 0xFF == ord('q'):
+            tello.streamoff()
+            tello.land()
             break
 
-    cap.release()
+    tello.end()
+    # cap.release()
     cv.destroyAllWindows()
 
 
