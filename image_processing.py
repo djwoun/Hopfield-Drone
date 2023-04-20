@@ -32,12 +32,12 @@ def sort_corners(corners):
     right_corners = corners[2:]
 
     # Separate left top and bottom corners by evaluating y-coordinates.
-    top_left = left_corners[0] if left_corners[0][1] > left_corners[1][1] else left_corners[1]
-    bot_left = left_corners[1] if left_corners[0][1] > left_corners[1][1] else left_corners[0]
+    top_left = left_corners[0] if left_corners[0][1] < left_corners[1][1] else left_corners[1]
+    bot_left = left_corners[1] if left_corners[0][1] < left_corners[1][1] else left_corners[0]
 
     # Separate right top and bottom corners by evaluating y-coordinates.
-    top_right = right_corners[0] if right_corners[0][1] > right_corners[1][1] else right_corners[1]
-    bot_right = right_corners[1] if right_corners[0][1] > right_corners[1][1] else right_corners[0]
+    top_right = right_corners[0] if right_corners[0][1] < right_corners[1][1] else right_corners[1]
+    bot_right = right_corners[1] if right_corners[0][1] < right_corners[1][1] else right_corners[0]
 
     return [top_left, top_right, bot_left, bot_right]
 
@@ -48,6 +48,7 @@ def decode_pattern(frame, cnt):
         corners.append([pt[0][0], pt[0][1]])
     # Sort corners in correct order for perspective transformation.
     corners = sort_corners(corners)
+    print(corners)
 
     # Apply perspective transformation, used to better segment and read each grid unit in pattern.
     orig_pts = np.float32(corners)
@@ -71,20 +72,25 @@ def decode_pattern(frame, cnt):
 
     # Decode each grid unit as 0 or 1 based on color at centroid.
     #   White -> 0, Black -> 1
-    for i in range(horizontal_grid_units):
-        for j in range(vertical_grid_units):
-            cX = int(i * grid_unit_width + grid_unit_width / 2)
-            cY = int(j * grid_unit_height + grid_unit_height / 2)
+    pattern_bits = []
+    for i in range(1, vertical_grid_units-1):
+        for j in range(1, horizontal_grid_units-1):
+            cX = int(j * grid_unit_width + grid_unit_width / 2)
+            cY = int(i * grid_unit_height + grid_unit_height / 2)
             if np.mean(pattern[cY, cX]) > white_black_thresh:
                 # Black Grid Unit, i.e., 1.
                 decoded_pattern = cv.putText(decoded_pattern, '1', (cX, cY), cv.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2,
                                              cv.LINE_AA)
+                pattern_bits.append(1)
             else:
                 # White Grid Unit, i.e., 0.
                 decoded_pattern = cv.putText(decoded_pattern, '0', (cX, cY), cv.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2,
                                              cv.LINE_AA)
+                pattern_bits.append(-1)
             # cv.circle(pattern, (x, y), 3, (0, 0, 255), -1)
 
+    print(pattern_bits)
+    print("--------------")
     cv.imshow("Decoded Pattern", decoded_pattern)
 
 
