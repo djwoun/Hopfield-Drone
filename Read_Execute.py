@@ -26,7 +26,7 @@ def run(network, weights):
 
 bipolarVector = []
 for RUN in range (10):
-    temp = np.loadtxt("test"+str(RUN)+".csv",
+    temp = np.loadtxt("csv/test"+str(RUN)+".csv",
                  delimiter=",", dtype=int)
     temp = np.delete(temp, 0, 0)
     bipolarVector.append(temp)
@@ -42,7 +42,7 @@ for RUN in range (1):
 
 
     image = (bipolarVector[0].reshape(10, 10) + 1) / 2 # Map -1 to 0 and 1 to 1
-    
+    print(bipolarVector[0])
     plt.imshow(image, cmap='gray')
     plt.show()
     
@@ -56,7 +56,7 @@ for RUN in range (1):
             for j in range(n):
                 if i != j:
                     weights[i, j] += bipolarVector[p2][i] * bipolarVector[p2][j] 
-        (print(bipolarVector[p2]))
+        #(print(bipolarVector[p2]))
     weights /= n
         
         
