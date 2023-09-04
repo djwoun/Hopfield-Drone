@@ -71,22 +71,45 @@ def recognize_pattern(input_pattern, expected_patterns, weights, tello):
     # print(input_pattern)
     recognized_pattern = run(input_pattern, weights)
 
-    print(tello.get_battery())
-
     if np.array_equal(expected_patterns[0], recognized_pattern) and used_patterns[0] == 0:
+        print("Battery: " + str(tello.get_battery()) + "%")
         print("Take off")
         tello.takeoff()
         used_patterns[0] = 1
     elif np.array_equal(expected_patterns[1], recognized_pattern) and used_patterns[1] == 0:
-        print("Flip Forward")
-        tello.flip_forward()
+        print("Battery: " + str(tello.get_battery()) + "%")
+        print("Move Forward 60cm (~2ft)")
+        tello.set_speed(10)
+        tello.move_forward(60)
         used_patterns[1] = 1
     elif np.array_equal(expected_patterns[2], recognized_pattern) and used_patterns[2] == 0:
-        print("Move Forward")
+        print("Battery: " + str(tello.get_battery()) + "%")
+        print("Go Over")
         tello.set_speed(10)
-        tello.move_forward(20)
+        tello.move_up(30)
+        tello.move_forward(60)
+        tello.move_down(30)
         used_patterns[2] = 1
+    elif np.array_equal(expected_patterns[3], recognized_pattern) and used_patterns[3] == 0:
+        print("Battery: " + str(tello.get_battery()) + "%")
+        print("Turn 180 Degrees")
+        tello.rotate_clockwise(180)
+        used_patterns[3] = 1
+    elif np.array_equal(expected_patterns[4], recognized_pattern) and used_patterns[4] == 0:
+        print("Battery: " + str(tello.get_battery()) + "%")
+        print("Go Around")
+        tello.set_speed(10)
+        tello.move_left(30)
+        tello.move_forward(60)
+        tello.move_right(30)
+        used_patterns[4] = 1
+    elif np.array_equal(expected_patterns[5], recognized_pattern) and used_patterns[5] == 0:
+        print("Battery: " + str(tello.get_battery()) + "%")
+        print("Flip Forward")
+        tello.flip_forward()
+        used_patterns[5] = 1
     elif np.array_equal(expected_patterns[9], recognized_pattern) and used_patterns[9] == 0:
+        print("Battery: " + str(tello.get_battery()) + "%")
         print("Land")
         tello.land()
         used_patterns[9] = 1
@@ -170,7 +193,7 @@ def decode_pattern(frame, cnt):
                 pattern_bits.append(-1)
             # cv.circle(pattern, (x, y), 3, (0, 0, 255), -1)
 
-    cv.imshow("Decoded Pattern", decoded_pattern)
+    # cv.imshow("Decoded Pattern", decoded_pattern)
 
     return pattern_bits
 
