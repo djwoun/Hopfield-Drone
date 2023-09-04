@@ -15,7 +15,7 @@ Computer vision is vital to state-of-the-art, next-generation technologies, from
 
 You can also view the demo video at my [virtual portfolio](https://jovanyoshioka.com/pages/projects.html?section=hopfieldDrone).
 
-## Paper (Unpublished)
+## Paper
 [Paper](https://github.com/jovanyoshioka/Hopfield-Drone/blob/main/paper.pdf)
 
 ## Poster
